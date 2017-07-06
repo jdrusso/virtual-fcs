@@ -19,8 +19,13 @@ def main():
     t = md.load("min.xtc", top="min.gro")
     print("Imported trajectories")
 
-    # Strip out the SRD atoms
-    non_srd_atoms = [a.index for a in t.topology.atoms if not a.name == 'SRD']
+    # Select only phosphorous atoms in phosphate head group.
+    #   This is a bit of a simplification, but it should significantly reduce the
+    #   amount of atoms to iterate over if we're only considering the phosphorous
+    #   at the center of the phosphate group.
+    #   Error from this would be on the order of the bond lengths, so roughly
+    #   1.5 angstrom.
+    phosphates = [a.index for a in t.topology.atoms if a.element.symbol == 'P']
     t.restrict_atoms(non_srd_atoms)
 
 
@@ -87,7 +92,7 @@ def main():
             # At this point, I have the index of a residue that is entirely within
             #   the detection volume.
             detected += generate_detection(center)
-            print("\r%d detections on frame %d             " % (detected, frame_index), end="")
+            print("\r%d detections on frame %d\r" % (detected, frame_index), end="")
 
         detections += [detected]
         print("")
