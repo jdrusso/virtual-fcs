@@ -9,6 +9,22 @@ spotX = 2.5
 spotY = 2.5
 spotZ = 2.5
 
+# Base intensity of a particle
+#   TODO: This is poorly defined here. This is just a scaling constant for the
+#   intensity of a particle that's being scaled based on its position relative
+#   to the beam.
+INTENSITY = 1
+
+# Gaussian beam profile parameters
+
+#   Radial and axial std. dev.s of the Gaussian beam profile
+w_xy = 1
+w_z = 1
+k = w_z/w_xy
+
+# Absorption probability
+epsilon = .5
+
 # Step size when iterating through frames
 STEP = 20
 
@@ -25,23 +41,11 @@ def main():
     #   at the center of the phosphate group.
     #   Error from this would be on the order of the bond lengths, so roughly
     #   1.5 angstrom.
-    phosphates = [a.index for a in t.topology.atoms if a.element.symbol == 'P']
-    t.restrict_atoms(non_srd_atoms)
-
-
-    # TODO: A better algorithm is probably to sort by x,y,z
+    phosphorous_atoms = [a.index for a in t.topology.atoms if a.element.symbol == 'P']
+    t.restrict_atoms(phosphorous_atoms)
 
     # This will be a list of detections per timestep
     detections = []
-
-    # More efficient algorithm:
-    # For each timestep:
-    #   Filter only atoms with x,y,z within the detection volume
-    #   Filter only residues with ALL their atoms in the previous list
-    # Using filter function: On each timestep, look at the list of residues. Filter out
-    #   any residue that doesn't have ALL its atoms in the detection area.
-    # May be better (but way more computation?) to use a method that tracks each
-    #   residue wherever it is, so that photobleaching etc can be incorporated
 
     # Iterate through each timestep (frame, in Gromacs terms)
     for frame_index in range(0,len(t), STEP):
@@ -49,49 +53,17 @@ def main():
 
         detected = 0
 
+        # Iterate through each residue
+        #   TODO: May want to track each residue independently. This can be
+        #   accomplished by just adding another dimension to the detections array,
+        #   and appending each residue to its own list within detections.
+        for residue in t.topology.residues:
 
-        #Iterate through each residue
-        for res_index in range(1, t[frame_index].topology.n_residues):
-
-            # Generate a list of the indices of all atoms in this residue
-            atom_indices = t[frame_index].topology.select("resSeq %d" % res_index)
-
-
-            # Iterate through each of these atoms, to make sure the entire residue is
-            #   within the detection area
-            in_detection_area = True
-            centers = []
-            for atom_index in atom_indices:
-
-                #Get the XYZ coordinates of this atom
-                atom = t.xyz[frame_index, atom_index,:]
-
-                #Determine whether the atom is within the detection area
-                in_detection_area = check_in_detection_volume(atom)
-
-                # If the atom is within the detection area, add its center
-                if in_detection_area:
-                    centers.append(atom)
-                # If it isn't, don't bother with the rest of the atoms in the residue.
-                else:
-                    break
-
-            # If the entire residue is not within the detection area,
-            #   go to the next residue.
-            if not in_detection_area:
+            # Do analysis if atom is in detection volume
+            if not check_in_detection_volume(t, frame_index, residue):
                 continue
 
-            # Average centers of atoms in residue.
-            #   axis = 0 keyword means it'll take a list of (x,y,z) tuples and return
-            #   a tuple of (avg_x, avg_y, avg_z)
-            #   TODO: May just want to use this to decide if a particle is in the
-            #    detection area
-            center = np.mean(centers, axis=0)
-
-
-            # At this point, I have the index of a residue that is entirely within
-            #   the detection volume.
-            detected += generate_detection(center)
+            detected += generate_detection(t, frame_index, residue)
             print("\r%d detections on frame %d\r" % (detected, frame_index), end="")
 
         detections += [detected]
@@ -101,13 +73,16 @@ def main():
 
     return detections
 
+#TODO: passing t is here bad practice, I think
+# Returns true if a residue is within the detection volume, otherwise false.
+def check_in_detection_volume(t, frame_index, residue):
 
-# Returns true if a given tuple of (x,y,z) coordinates are within the detection
-#   volume, otherwise false.
-def check_in_detection_volume(coords):
+    # For now, pay attention to all atoms, regardless of whether or not they're
+    #   in the detection volume.
+    #   TODO: Will this throw an unreachable exception?
+    return True
 
-    # Unpack coords tuple into x, y, z
-    x, y, z = coords
+    x, y, z = t.xyz[frame_index, residue._atoms[0].index]
 
     # Get magnitude of distance to the spot center
     distance = (x - spotX)**2 + (y - spotY)**2
@@ -117,34 +92,22 @@ def check_in_detection_volume(coords):
 
     return in_detection_area
 
+#TODO: passing t is here bad practice, I think
+def generate_detection(t, frame_index, residue):
 
-def generate_detection(center):
+    # Get coordinates of residue (more correctly, of the P atom)
+    x, y, z = t.xyz[frame_index, residue._atoms[0].index]
 
-    #Radial and axial std. dev.s of the Gaussian beam profile
-    w_xy = 1
-    w_z = 1
-
-    k = w_z/w_xy
-
-    # Absorption probability
-    epsilon = .5
-
-    # Determine the probability of a detection
-    # See Dix et al. (2006), J. Phys. Chem.
-    probability = \
-        1 * np.exp(
-        -( (center[0] - spotX)**2 + (center[1] - spotY)**2 + ((center[2] - spotZ)/k)**2)
+    # Calculate contribution to intensity from an atom, based on the Gaussian
+    #   profile of the incident beam and the particle's position.
+    intensity = \
+        INTENSITY * np.exp(
+        -( (x - spotX)**2 + (y - spotY)**2 + ((z - spotZ)/k)**2)
         / 2 * w_xy**2 )
 
-    num = np.random.random()
+    return intensity
 
-    # Detection!
-    if num < probability:
-        return 1
 
-    # No detection
-    else:
-        return 0
 
 if __name__ == "__main__":
     detections = main()
