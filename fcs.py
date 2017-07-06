@@ -3,40 +3,74 @@ import mdtraj as md
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Define a spot size (in nanometers)
-spot_radius = 2
-spotX = 2.5
-spotY = 2.5
-spotZ = 2.5
+######################## Detection area parameters ###########################
+# Radius of detection area (in nanometers)
+spot_radius = 7.5
+# Coordinates of detection area (in nanometers)
+spotX = 10.0
+spotY = 10.0
+spotZ = 10.0
+##############################################################################
 
-# Base intensity of a particle
-#   TODO: This is poorly defined here. This is just a scaling constant for the
-#   intensity of a particle that's being scaled based on its position relative
-#   to the beam.
-INTENSITY = 1
-
-# Gaussian beam profile parameters
-
+###################### Gaussian beam profile parameters ######################
 #   Radial and axial std. dev.s of the Gaussian beam profile
 w_xy = 1
 w_z = 1
 k = w_z/w_xy
+##############################################################################
 
-# Absorption probability
-epsilon = .5
+# Step size when iterating through data frames
+STEP = 1
 
-# Step size when iterating through frames
-STEP = 25
+# Scaling constant for the intensity of a fluorescing particle
+INTENSITY = 1000
 
 # Percentage of tagged particles
-SAMPLING_RATIO = .37
+SAMPLING_RATIO = .1
 
 def main():
-    print("Running")
 
+    # Gather list of intensities at each timestep for each lipid
+    intensities = analyze_intensities()
+    plot(intensities)
+    plt.show()
+
+def plot(intensities):
+    intensities = [x for x in intensities if np.mean(x) > 50]
+
+    plt.figure(1)
+    plt.subplot(221)
+    # Plot the intensities of detections associated with each lipid
+    for _data in intensities:
+        plt.plot(np.arange(0,len(_data), 1), _data, marker = 'o')
+    plt.xlabel("Time")
+    plt.ylabel("Intensity")
+    plt.title("Intensity Trace")
+
+    plt.subplot(223)
+    for _data in intensities:
+        plt.acorr(_data, maxlags=1000, usevlines=False, linestyle='-', marker="None")
+    plt.title("Autocorrelation")
+
+    plt.subplot(222)
+    # Plot sum of intensities (i.e. what a detector would see)
+    summed_data = np.sum(intensities, axis=0)
+    plt.plot(np.arange(0,len(summed_data), 1), summed_data)
+    plt.title("Summed Intensity Trace")
+
+    plt.subplot(224)
+    plt.acorr(summed_data, maxlags=1000, usevlines=False, linestyle='-', marker="None")
+    plt.title("Autocorrelation of Summed Intensities")
+
+def analyze_intensities():
+    print("Beginning analaysis.")
+
+    print("Importing trajectories")
     # Load trajectory file
-    t = md.load("min.xtc", top="min.gro")
-    print("Imported trajectories")
+    t = md.load("20nm/run.xtc", top="20nm/system.gro")
+    print("Trajectories successfully imported.")
+
+    print("Timestep for plotted data will be %f picoseconds" % (t.timestep * STEP))
 
     # Select only phosphorous atoms in phosphate head group.
     #   This is a bit of a simplification, but it should significantly reduce the
@@ -47,17 +81,15 @@ def main():
     print("Starting with %d atoms" % t.topology.n_atoms)
 
     phosphorous_atoms = [a.index for a in t.topology.atoms if a.element.symbol == 'P']
-    print(phosphorous_atoms)
     t.atom_slice(phosphorous_atoms, inplace=True)
 
     print("Reduced to %d phosphorous atoms" % t.topology.n_atoms)
 
-    # Reduce to the sampling ratio
+    # Reduce to the sampling ratio * number of phosphorous atoms
     num_sampled = int(t.topology.n_atoms * SAMPLING_RATIO)
 
     # Randomly select the sampled atoms
     sampled = np.random.choice([a.index for a in t.topology.atoms], num_sampled)
-    # sampled = [a.index for a in t.topology.atoms if a.index % (num_sampled) == 0]
     t.atom_slice(sampled, inplace=True)
 
     print("Reduced to %d \"tagged\" phosphorous atoms" % t.topology.n_atoms)
@@ -69,7 +101,7 @@ def main():
 
     # Iterate through each timestep (frame, in Gromacs terms)
     for frame_index in range(0,len(t), STEP):
-        print("Processing frame %d out of %d" % (frame_index/STEP, len(t)/STEP), end="\r")
+        print("\rProcessing frame %d out of %d" % (frame_index/STEP, len(t)/STEP), end="\r")
 
         # Initialize this to -1, since it increments at the beginning of the residue loop
         idx = -1
@@ -90,8 +122,6 @@ def main():
 
             detected = generate_detection(t, frame_index, residue)
             detections[idx].append(detected)
-
-        print("")
 
     # np.savetxt("dataout.dat", detections)
 
@@ -134,7 +164,4 @@ def generate_detection(t, frame_index, residue):
 
 
 if __name__ == "__main__":
-    detections = main()
-    for data in detections:
-        plt.plot(np.arange(0,len(data), 1), data)
-    plt.show()
+    main()
