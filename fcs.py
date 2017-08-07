@@ -47,6 +47,7 @@ def plot(intensities):
     ################## Plot intensity traces #############################
     # Plot the intensities of detections associated with each lipid
     plt.subplot(221)
+    # Plot the intensities of detections associated with each lipid
     for _data in intensities:
         plt.plot(np.arange(0,len(_data), 1), _data, marker = 'o', markersize=.5)
     plt.xlabel("Time")
@@ -71,6 +72,10 @@ def plot(intensities):
     plt.title("Autocorrelation")
     plt.xlim([0,2000])
 
+    # Plot sum of intensities (i.e. what a detector would see)
+    summed_data = np.sum(intensities, axis=0)
+    plt.plot(np.arange(0,len(summed_data), 1), summed_data)
+    plt.title("Summed Intensity Trace")
     #Summed
     plt.subplot(224)
     plt.acorr(summed_data, maxlags=2000, usevlines=False, linestyle='-', marker="None")
