@@ -47,6 +47,10 @@ class FakeTrajectory:
         # Reindex
         for i in range(self.xyz.shape[1]):
             self.topology.atoms[i].setIndex(i)
+            
+    def remove(self, index):
+        for i in index:
+            self.xyz.remove(i)
         
     def __len__(self):
         
