@@ -32,7 +32,8 @@ class FakeTrajectory:
         
         self.topology.n_residues = new_tot
         
-        kept_atoms = np.random.choice(self.topology.atoms, new_tot, replace=False)
+#         kept_atoms = np.random.choice(self.topology.atoms, new_tot, replace=False)
+        kept_atoms = self.topology.atoms[:new_tot]
         print("XYZ: %d, N_ATOMS: %d" % (len(self.xyz), len(self.topology.atoms)))
         self.topology.atoms = kept_atoms
         print("XYZ: %d, N_ATOMS: %d" % (len(self.xyz), len(self.topology.atoms)))
